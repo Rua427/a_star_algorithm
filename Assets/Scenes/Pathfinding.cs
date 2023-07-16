@@ -2,75 +2,102 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Diagnostics;
+using System;
 
 public class Pathfinding : MonoBehaviour
 {
-    public Transform seeker, target;
+    PathRequestManager requestManager;
+
     Grid grid;
 
     private void Awake()
     {
         grid = GetComponent<Grid>();
+        requestManager = GetComponent<PathRequestManager>();
     }
 
     private void Update()
     {
-        if (Input.GetButtonDown("Jump"))
-            FindPath(seeker.position, target.position);
+        // if (Input.GetButtonDown("Jump")){
+        //     FindPath(seeker.position, target.position);
+        // }
     }
-    void FindPath(Vector3 startPos, Vector3 targetPos)
+
+    public void StartFindPath(Vector3 startPos, Vector3 targetPos){
+        StartCoroutine(FindPath(startPos, targetPos));
+    }
+    IEnumerator FindPath(Vector3 startPos, Vector3 targetPos)
     {
         Stopwatch sw = new Stopwatch();
         sw.Start();
+
+        Vector3[] wayPoints = new Vector3[0];
+        bool pathSuccess = false;
+
         // position에 따른 grid selecting
         Node startNode = grid.NodeFromWorldPoint(startPos);
         Node targetNode = grid.NodeFromWorldPoint(targetPos);
 
-        Heap<Node> openSet = new Heap<Node>(grid.MaxSize);
-        HashSet<Node> closedSet = new HashSet<Node>();
 
-        openSet.Add(startNode);
+        // 해당 노드가 탐색 가능한 곳일경우에만
+        if(startNode.walkable && targetNode.walkable){
 
-        while (openSet.Count > 0)
-        {
-            Node currentNode = openSet.RemoveFirst();
-            closedSet.Add(currentNode);
+            // heap 정렬로 성능 최적화
+            Heap<Node> openSet = new Heap<Node>(grid.MaxSize);
+            HashSet<Node> closedSet = new HashSet<Node>();
 
-            if (currentNode == targetNode)
+            openSet.Add(startNode);
+
+            while (openSet.Count > 0)
             {
-                sw.Stop();
-                print("Path found:" + sw.ElapsedMilliseconds + "ms");
-                RetracePath(startNode, targetNode);
-                return;
-            }
+                Node currentNode = openSet.RemoveFirst();
+                closedSet.Add(currentNode);
 
-            foreach (Node neighbour in grid.GetNeighbours(currentNode))
-            {
-                if (!neighbour.walkable || closedSet.Contains(neighbour))
+                if (currentNode == targetNode)
                 {
-                    continue;
+                    sw.Stop();
+                    print("Path found:" + sw.ElapsedMilliseconds + "ms");
+                    pathSuccess = true;
+                    break;
                 }
 
-                //현재 node의 총 비용 + 현재 node와 이웃 node 사이의 비용. (start지점에서 현재 node까지의 거리 비용)
-                int newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour);
-
-                if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+                foreach (Node neighbour in grid.GetNeighbours(currentNode))
                 {
-                    neighbour.gCost = newMovementCostToNeighbour;
-                    neighbour.hCost = GetDistance(neighbour, targetNode);
-
-                    neighbour.parent = currentNode;
-
-                    if (!openSet.Contains(neighbour))
+                    if (!neighbour.walkable || closedSet.Contains(neighbour))
                     {
-                        openSet.Add(neighbour);
+                        continue;
+                    }
+
+                    //현재 node의 총 비용 + 현재 node와 이웃 node 사이의 비용. (start지점에서 현재 node까지의 거리 비용)
+                    int newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour);
+
+                    if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
+                    {
+                        neighbour.gCost = newMovementCostToNeighbour;
+                        neighbour.hCost = GetDistance(neighbour, targetNode);
+
+                        neighbour.parent = currentNode;
+
+                        if (!openSet.Contains(neighbour))
+                        {
+                            openSet.Add(neighbour);
+                        }
                     }
                 }
-            }
+            }      
         }
+
+        yield return null;
+
+        if(pathSuccess){
+            wayPoints = RetracePath(startNode, targetNode);
+        }
+
+        requestManager.FinishedProcessingPath(wayPoints, pathSuccess);
     }
 
-    void RetracePath(Node startNode, Node endNode)
+    // 탐색이 모두 완료되어 찾은 path의 위치를 가져옴 world position
+    Vector3[] RetracePath(Node startNode, Node endNode)
     {
         List<Node> path = new List<Node>();
 
@@ -82,11 +109,28 @@ public class Pathfinding : MonoBehaviour
             currentNode = currentNode.parent;
         }
 
-        path.Reverse();
+        Vector3[] wayPoints = SimplyfyPath(path);
+        Array.Reverse(wayPoints);
+        return wayPoints;
 
-        grid.path = path;
     }
+    
+    // Node에서 위치값만 추출 Node → Vector3 
+    Vector3[] SimplyfyPath(List<Node> path){
+        List<Vector3> wayPoints = new List<Vector3>(); 
+        Vector2 directionOld = Vector2.zero;
 
+        for (int i = 1; i < path.Count; i++)
+        {
+            Vector2 directionNew  = new Vector2(path[i - 1].gridX - path[i].gridX, path[i - 1].gridY - path[i].gridY);
+            if(directionNew != directionOld){
+                wayPoints.Add(path[i].worldPosition);
+            }
+            directionOld = directionNew;
+        }
+
+        return wayPoints.ToArray();
+    }
     int GetDistance(Node nodeA, Node nodeB)
     {
         int dstX = Mathf.Abs(nodeA.gridX - nodeB.gridX);
