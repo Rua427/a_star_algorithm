@@ -23,7 +23,8 @@ public class Pathfinding : MonoBehaviour
         // }
     }
 
-    public void StartFindPath(Vector3 startPos, Vector3 targetPos){
+    public void StartFindPath(Vector3 startPos, Vector3 targetPos)
+    {
         StartCoroutine(FindPath(startPos, targetPos));
     }
     IEnumerator FindPath(Vector3 startPos, Vector3 targetPos)
@@ -40,7 +41,8 @@ public class Pathfinding : MonoBehaviour
 
 
         // 해당 노드가 탐색 가능한 곳일경우에만
-        if(startNode.walkable && targetNode.walkable){
+        if (startNode.walkable && targetNode.walkable)
+        {
 
             // heap 정렬로 성능 최적화
             Heap<Node> openSet = new Heap<Node>(grid.MaxSize);
@@ -69,7 +71,7 @@ public class Pathfinding : MonoBehaviour
                     }
 
                     //현재 node의 총 비용 + 현재 node와 이웃 node 사이의 비용. (start지점에서 현재 node까지의 거리 비용)
-                    int newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour);
+                    int newMovementCostToNeighbour = currentNode.gCost + GetDistance(currentNode, neighbour) + neighbour.movementPenalty;
 
                     if (newMovementCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
                     {
@@ -82,14 +84,19 @@ public class Pathfinding : MonoBehaviour
                         {
                             openSet.Add(neighbour);
                         }
+                        else
+                        {
+                            openSet.UpdateItem(neighbour);
+                        }
                     }
                 }
-            }      
+            }
         }
 
         yield return null;
 
-        if(pathSuccess){
+        if (pathSuccess)
+        {
             wayPoints = RetracePath(startNode, targetNode);
         }
 
@@ -114,16 +121,18 @@ public class Pathfinding : MonoBehaviour
         return wayPoints;
 
     }
-    
+
     // Node에서 위치값만 추출 Node → Vector3 
-    Vector3[] SimplyfyPath(List<Node> path){
-        List<Vector3> wayPoints = new List<Vector3>(); 
+    Vector3[] SimplyfyPath(List<Node> path)
+    {
+        List<Vector3> wayPoints = new List<Vector3>();
         Vector2 directionOld = Vector2.zero;
 
         for (int i = 1; i < path.Count; i++)
         {
-            Vector2 directionNew  = new Vector2(path[i - 1].gridX - path[i].gridX, path[i - 1].gridY - path[i].gridY);
-            if(directionNew != directionOld){
+            Vector2 directionNew = new Vector2(path[i - 1].gridX - path[i].gridX, path[i - 1].gridY - path[i].gridY);
+            if (directionNew != directionOld)
+            {
                 wayPoints.Add(path[i].worldPosition);
             }
             directionOld = directionNew;

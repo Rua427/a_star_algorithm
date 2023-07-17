@@ -9,6 +9,9 @@ public class Grid : MonoBehaviour
     public LayerMask unwalkableMask;
     public Vector2 gridWorldSize;
     public float nodeRadius;
+    public TerrainType[] walkableRegions;
+    LayerMask walkableMask;
+    Dictionary<int, int> walkableRegionDict = new Dictionary<int, int>();
     Node[,] grid;
 
     float nodeDiameter;
@@ -20,6 +23,11 @@ public class Grid : MonoBehaviour
         gridSizeX = Mathf.RoundToInt(gridWorldSize.x / nodeDiameter);
         gridSizeY = Mathf.RoundToInt(gridWorldSize.y / nodeDiameter);
 
+        foreach (TerrainType region in walkableRegions)
+        {
+            walkableMask.value |= walkableMask | region.terrainMask.value;
+            walkableRegionDict.Add((int)Mathf.Log(region.terrainMask.value, 2), region.terrainPenalty);
+        }
         CreateToGrid();
     }
 
@@ -43,7 +51,19 @@ public class Grid : MonoBehaviour
 
                 bool walkable = !(Physics.CheckSphere(worldPoint, nodeRadius, unwalkableMask));
 
-                grid[x, y] = new Node(walkable, worldPoint, x, y);
+                int movementPenalty = 0;
+
+                // raycast
+                if (walkable)
+                {
+                    Ray ray = new Ray(worldPoint + Vector3.up * 50, Vector3.down);
+                    RaycastHit hit;
+                    if (Physics.Raycast(ray, out hit, 100, walkableMask))
+                    {
+                        walkableRegionDict.TryGetValue(hit.collider.gameObject.layer, out movementPenalty);
+                    }
+                }
+                grid[x, y] = new Node(walkable, worldPoint, x, y, movementPenalty);
             }
         }
     }
@@ -105,24 +125,31 @@ public class Grid : MonoBehaviour
         // }
         // else
         // {
-            if (grid != null && displayGridGizmos)
+        if (grid != null && displayGridGizmos)
+        {
+            foreach (Node n in grid)
             {
-                foreach (Node n in grid)
-                {
 
-                    Gizmos.color = (n.walkable) ? Color.white : Color.red;
+                Gizmos.color = (n.walkable) ? Color.white : Color.red;
 
-                    // if (path != null)
-                    // {
-                    //     if (path.Contains(n))
-                    //     {
-                    //         Gizmos.color = Color.black;
-                    //     }
-                    // }
-                    Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
-                }
+                // if (path != null)
+                // {
+                //     if (path.Contains(n))
+                //     {
+                //         Gizmos.color = Color.black;
+                //     }
+                // }
+                Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
             }
-       // }
+        }
+        // }
 
+    }
+
+    [System.Serializable]
+    public class TerrainType
+    {
+        public LayerMask terrainMask;
+        public int terrainPenalty;
     }
 }
