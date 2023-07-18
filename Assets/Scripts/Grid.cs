@@ -10,12 +10,16 @@ public class Grid : MonoBehaviour
     public Vector2 gridWorldSize;
     public float nodeRadius;
     public TerrainType[] walkableRegions;
+    public int obstacleProximityPenalty = 10;
     LayerMask walkableMask;
     Dictionary<int, int> walkableRegionDict = new Dictionary<int, int>();
     Node[,] grid;
 
     float nodeDiameter;
     int gridSizeX, gridSizeY;
+
+    int penaltyMin = int.MaxValue;
+    int penaltyMax = int.MinValue;
 
     private void Awake()
     {
@@ -28,7 +32,7 @@ public class Grid : MonoBehaviour
             walkableMask.value |= walkableMask | region.terrainMask.value;
             walkableRegionDict.Add((int)Mathf.Log(region.terrainMask.value, 2), region.terrainPenalty);
         }
-        CreateToGrid();
+        CreateGrid();
     }
 
     public int MaxSize
@@ -38,7 +42,7 @@ public class Grid : MonoBehaviour
             return gridSizeX * gridSizeY;
         }
     }
-    private void CreateToGrid()
+    private void CreateGrid()
     {
         grid = new Node[gridSizeX, gridSizeY];
 
@@ -62,12 +66,86 @@ public class Grid : MonoBehaviour
                     {
                         walkableRegionDict.TryGetValue(hit.collider.gameObject.layer, out movementPenalty);
                     }
+
+
+                }
+
+                // 장애물에는 가장 큰 값을 주어서 길 > 장애물 이 되지 않도록 함.
+                if (!walkable)
+                {
+                    movementPenalty += obstacleProximityPenalty;
                 }
                 grid[x, y] = new Node(walkable, worldPoint, x, y, movementPenalty);
             }
         }
+
+        BlurPenaltyMap(3);
     }
 
+    // 각 grid 패널티 값을 blur처럼 적용하여 path line 을 자연스럽게 조정
+    void BlurPenaltyMap(int blurSize)
+    {
+
+        // 블러 사이즈
+        int kernelSize = blurSize * 2 + 1;
+        int kernelExtents = (kernelSize - 1) / 2;
+
+        int[,] penaltiesHorizontalPass = new int[gridSizeX, gridSizeY];
+        int[,] penaltiesVerticalPass = new int[gridSizeX, gridSizeY];
+
+        for (int y = 0; y < gridSizeY; y++)
+        {
+            // 첫번째 열
+            for (int x = -kernelExtents; x <= kernelExtents; x++)
+            {
+                int sampleX = Mathf.Clamp(x, 0, kernelExtents);
+                penaltiesHorizontalPass[0, y] += grid[sampleX, y].movementPenalty;
+            }
+
+            // 행 grid만 계산
+            for (int x = 1; x < gridSizeX; x++)
+            {
+                int removeIndex = Mathf.Clamp(x - kernelExtents - 1, 0, gridSizeX);
+                int addIndex = Mathf.Clamp(x + kernelExtents, 0, gridSizeX - 1);
+
+                penaltiesHorizontalPass[x, y] = penaltiesHorizontalPass[x - 1, y] - grid[removeIndex, y].movementPenalty + grid[addIndex, y].movementPenalty;
+            }
+        }
+
+        for (int x = 0; x < gridSizeX; x++)
+        {
+            // 첫번째 행
+            for (int y = -kernelExtents; y <= kernelExtents; y++)
+            {
+                int sampleY = Mathf.Clamp(y, 0, kernelExtents);
+                penaltiesVerticalPass[x, 0] += penaltiesHorizontalPass[x, sampleY];
+            }
+
+            int blurredPenalty = Mathf.RoundToInt((float)penaltiesVerticalPass[x, 0] / (kernelSize * kernelSize));
+            grid[x, 0].movementPenalty = blurredPenalty;
+
+            // 열 grid 계산
+            for (int y = 1; y < gridSizeY; y++)
+            {
+                int removeIndex = Mathf.Clamp(y - kernelExtents - 1, 0, gridSizeY);
+                int addIndex = Mathf.Clamp(y + kernelExtents, 0, gridSizeY - 1);
+
+                penaltiesVerticalPass[x, y] = penaltiesVerticalPass[x, y - 1] - penaltiesHorizontalPass[x, removeIndex] + penaltiesHorizontalPass[x, addIndex];
+
+                blurredPenalty = Mathf.RoundToInt((float)penaltiesVerticalPass[x, y] / (kernelSize * kernelSize));
+                grid[x, y].movementPenalty = blurredPenalty;
+
+                if (blurredPenalty > penaltyMax)
+                {
+                    penaltyMax = blurredPenalty;
+                }
+                if (blurredPenalty < penaltyMin)
+                {
+                    penaltyMin = blurredPenalty;
+                }
+            }
+        }
+    }
     public List<Node> GetNeighbours(Node node)
     {
         List<Node> neighbours = new List<Node>();
@@ -130,7 +208,8 @@ public class Grid : MonoBehaviour
             foreach (Node n in grid)
             {
 
-                Gizmos.color = (n.walkable) ? Color.white : Color.red;
+                Gizmos.color = Color.Lerp(Color.white, Color.black, Mathf.InverseLerp(penaltyMin, penaltyMax, n.movementPenalty));
+                Gizmos.color = (n.walkable) ? Gizmos.color : Color.red;
 
                 // if (path != null)
                 // {
@@ -139,7 +218,7 @@ public class Grid : MonoBehaviour
                 //         Gizmos.color = Color.black;
                 //     }
                 // }
-                Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
+                Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter));
             }
         }
         // }

@@ -4,6 +4,8 @@ using UnityEngine;
 using System.Diagnostics;
 using System;
 
+
+
 public class Pathfinding : MonoBehaviour
 {
     PathRequestManager requestManager;
