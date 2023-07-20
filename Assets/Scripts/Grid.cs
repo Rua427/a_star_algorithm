@@ -27,11 +27,20 @@ public class Grid : MonoBehaviour
         gridSizeX = Mathf.RoundToInt(gridWorldSize.x / nodeDiameter);
         gridSizeY = Mathf.RoundToInt(gridWorldSize.y / nodeDiameter);
 
+        // layermask는 기본적으로 2진수 연산이다..
+        // layer 2진수 값을 더하면 더한 layer만을 사용할 수 있음.
+        // 비트 계산
         foreach (TerrainType region in walkableRegions)
         {
-            walkableMask.value |= walkableMask | region.terrainMask.value;
-            walkableRegionDict.Add((int)Mathf.Log(region.terrainMask.value, 2), region.terrainPenalty);
+            // 2진수 합산 비트연산으로 ~
+            walkableMask.value |= walkableMask.value | region.terrainMask.value;
+
+            // 밑을 2로 하여 로그 계산시 10진수로 변환 가능
+            int log = (int)Mathf.Log(region.terrainMask.value, 2);
+            walkableRegionDict.Add(log, region.terrainPenalty);
         }
+
+        // path finding 하기 위한 grid 생성
         CreateGrid();
     }
 
@@ -44,17 +53,19 @@ public class Grid : MonoBehaviour
     }
     private void CreateGrid()
     {
+        // 맵 크기만큼 격자 생성
         grid = new Node[gridSizeX, gridSizeY];
 
+        // 맵의 좌 하단 좌표값
         Vector3 worldBottomLeft = transform.position - Vector3.right * gridWorldSize.x / 2 - Vector3.forward * gridWorldSize.y / 2;
         for (int x = 0; x < gridSizeX; x++)
         {
             for (int y = 0; y < gridSizeY; y++)
             {
+                // 각 격자의 위치 설정
                 Vector3 worldPoint = worldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) + Vector3.forward * (y * nodeDiameter + nodeRadius);
-
+                // 격자 주위 layer 확인하여 path finding 가능한 격자인지 확인
                 bool walkable = !(Physics.CheckSphere(worldPoint, nodeRadius, unwalkableMask));
-
                 int movementPenalty = 0;
 
                 // raycast
@@ -62,12 +73,11 @@ public class Grid : MonoBehaviour
                 {
                     Ray ray = new Ray(worldPoint + Vector3.up * 50, Vector3.down);
                     RaycastHit hit;
+                    // 그래서 설정한 모든 layer를 감지 할 수 있음!
                     if (Physics.Raycast(ray, out hit, 100, walkableMask))
                     {
                         walkableRegionDict.TryGetValue(hit.collider.gameObject.layer, out movementPenalty);
                     }
-
-
                 }
 
                 // 장애물에는 가장 큰 값을 주어서 길 > 장애물 이 되지 않도록 함.
@@ -75,6 +85,7 @@ public class Grid : MonoBehaviour
                 {
                     movementPenalty += obstacleProximityPenalty;
                 }
+                // 격자 최종 생성
                 grid[x, y] = new Node(walkable, worldPoint, x, y, movementPenalty);
             }
         }
@@ -225,6 +236,7 @@ public class Grid : MonoBehaviour
 
     }
 
+    // 각 지형별 penalty값을 주어 path finding 우선 순위를 결정 할 수 있게 함.
     [System.Serializable]
     public class TerrainType
     {
