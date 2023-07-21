@@ -8,14 +8,14 @@ using System;
 
 public class Pathfinding : MonoBehaviour
 {
-    PathRequestManager requestManager;
+    // PathRequestManager requestManager;
 
     Grid grid;
 
     private void Awake()
     {
         grid = GetComponent<Grid>();
-        requestManager = GetComponent<PathRequestManager>();
+        // requestManager = GetComponent<PathRequestManager>();
     }
 
     private void Update()
@@ -25,11 +25,11 @@ public class Pathfinding : MonoBehaviour
         // }
     }
 
-    public void StartFindPath(Vector3 startPos, Vector3 targetPos)
-    {
-        StartCoroutine(FindPath(startPos, targetPos));
-    }
-    IEnumerator FindPath(Vector3 startPos, Vector3 targetPos)
+    // public void StartFindPath(Vector3 startPos, Vector3 targetPos)
+    // {
+    //     StartCoroutine(FindPath(startPos, targetPos));
+    // }
+    public void FindPath(PathRequest request, Action<PathResult> callback)
     {
         Stopwatch sw = new Stopwatch();
         sw.Start();
@@ -38,8 +38,8 @@ public class Pathfinding : MonoBehaviour
         bool pathSuccess = false;
 
         // position에 따른 grid selecting
-        Node startNode = grid.NodeFromWorldPoint(startPos);
-        Node targetNode = grid.NodeFromWorldPoint(targetPos);
+        Node startNode = grid.NodeFromWorldPoint(request.pathStart);
+        Node targetNode = grid.NodeFromWorldPoint(request.pathEnd);
 
 
         // 해당 노드가 탐색 가능한 곳일경우에만
@@ -95,14 +95,14 @@ public class Pathfinding : MonoBehaviour
             }
         }
 
-        yield return null;
 
         if (pathSuccess)
         {
             wayPoints = RetracePath(startNode, targetNode);
         }
 
-        requestManager.FinishedProcessingPath(wayPoints, pathSuccess);
+        callback(new PathResult(wayPoints, pathSuccess, request.callback));
+        // requestManager.FinishedProcessingPath(wayPoints, pathSuccess);
     }
 
     // 탐색이 모두 완료되어 찾은 path의 위치를 가져옴 world position

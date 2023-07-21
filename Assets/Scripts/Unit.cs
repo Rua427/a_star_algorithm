@@ -33,9 +33,10 @@ public class Unit : MonoBehaviour
     // 
     IEnumerator UpdatePath()
     {
-        Debug.Log(Time.timeSinceLevelLoad);
+        // timeSinceLevelLoad map load되는 시간
         yield return new WaitForSeconds(Time.timeSinceLevelLoad);
-        PathRequestManager.RequestPath(transform.position, target.position, OnPathFound);
+
+        PathRequestManager.RequestPath(new PathRequest(transform.position, target.position, OnPathFound));
         float sqrMoveThreshold = pathUpdateMoveThreshold * pathUpdateMoveThreshold;
         Vector3 targetPosOld = target.position;
 
